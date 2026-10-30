@@ -17,7 +17,7 @@ async def noop(payload: dict) -> dict:
 async def process_claim(payload: dict) -> dict:
     from app.services.processing import process_claim as run
 
-    return await run(payload["claim_id"])
+    return await run(payload["claim_id"], use_llm=bool(payload.get("use_llm", True)))
 
 
 @handler("process_batch")
@@ -31,7 +31,9 @@ async def process_batch(payload: dict) -> dict:
         if payload.get("only_unprocessed", True):
             q = q.where(Claim.status == "received")
         ids = list((await session.execute(q.order_by(Claim.id).limit(limit))).scalars())
-    return await process_many(ids, concurrency=int(payload.get("concurrency", 5)))
+    return await process_many(
+        ids, concurrency=int(payload.get("concurrency", 5)), use_llm=bool(payload.get("use_llm", False))
+    )
 
 
 @handler("parse_document")

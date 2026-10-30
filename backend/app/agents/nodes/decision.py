@@ -127,10 +127,13 @@ def template_explanation(inp: dict) -> tuple[str, list[str]]:
     return " ".join(parts), findings[:6]
 
 
-async def write_explanation(inp: dict) -> tuple[str, list[str], str, str | None, float | None]:
+async def write_explanation(inp: dict, use_llm: bool = True) -> tuple[str, list[str], str, str | None, float | None]:
     """Returns (explanation, key_findings, source, prompt_version, model_confidence)."""
     settings = get_settings()
     system, version = prompts.load("decision")
+    if not use_llm:
+        text, findings = template_explanation(inp)
+        return text, findings, "template", None, None
     masked = mask_payload(inp)
     user = "Input JSON:\n" + json.dumps(masked, default=str, indent=1)
     for attempt in (1, 2):
@@ -165,7 +168,7 @@ async def decide(state: ClaimState) -> dict:
     confidence = confidence_for(action, anomaly.get("tier"), anomaly.get("risk"), needs_review)
 
     inp = decision_input(state, action)
-    explanation, key_findings, source, version, _ = await write_explanation(inp)
+    explanation, key_findings, source, version, _ = await write_explanation(inp, state.get("use_llm", True))
     rec = {
         "action": action,  # always from code
         "claimed_amount": payable.get("claimed", state["claim"].get("claimed_amount")),

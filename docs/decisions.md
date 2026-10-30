@@ -107,3 +107,12 @@ For R06 and R08 (full-claim findings) the payable is 0 and the whole claimed amo
 - **Explicit `ANTHROPIC_BASE_URL` setting** (default `https://api.anthropic.com`), so an inherited shell variable never redirects traffic.
 - **Embedding rate limits.** Voyage requests are batched under 8K estimated tokens and retried with backoff on 429s; query embeddings are cached in-process.
 - **Clause-note namespaces** encode clause numbers (`4.2` -> `4_2`) because store namespace labels cannot contain periods.
+
+## Deployment
+
+- **Spaces bucket in SGP1, not BLR1.** Spaces was not available in BLR1 for this account, so the bucket `leaklens-files` is in Singapore; Postgres stays in BLR1.
+  This departs from the plan's fixed decision (and the data-residency item in Phase 10): claim documents and model files are stored outside India. Revisit before handling real claims.
+- **Bulk batches run deterministically by default** (`use_llm: false`): rules, anomaly scoring and a templated explanation, no coverage, investigator or decision-writer calls.
+  Single-claim processing, demo claims and live claims use every agent. Running the agents across thousands of claims is slow (Voyage rate limits) and costly; pass `use_llm: true` to `POST /admin/process-batch` to override.
+- **Migrations use the direct database URL**; the API uses DO's PgBouncer pool in transaction mode (prepared statements disabled), and LangGraph uses the direct URL.
+- **Deployed demo accounts use a generated password** (not the local seed password, which is public in this repository).

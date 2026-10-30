@@ -17,7 +17,7 @@ from app.services.rules.engine import RULES_VERSION
 log = get_logger(__name__)
 
 
-async def process_claim(claim_id: str) -> dict:
+async def process_claim(claim_id: str, use_llm: bool = True) -> dict:
     """Run the graph until the human-review interrupt. Re-processing starts a fresh thread."""
     await runtime.checkpointer().adelete_thread(f"claim:{claim_id}")
     run_id = uuid.uuid4().hex
@@ -32,7 +32,7 @@ async def process_claim(claim_id: str) -> dict:
         rules=RULES_VERSION,
     )
     try:
-        state = await runtime.graph().ainvoke({"claim_id": claim_id, "run_id": run_id}, config)
+        state = await runtime.graph().ainvoke({"claim_id": claim_id, "run_id": run_id, "use_llm": use_llm}, config)
     except Exception as exc:
         log.exception("process_claim_failed", claim_id=claim_id)
         async with session_scope() as session:
@@ -67,7 +67,8 @@ async def pending_interrupt(claim_id: str) -> bool:
     return bool(snapshot and snapshot.next and "human_review" in snapshot.next)
 
 
-async def process_many(claim_ids: list[str], concurrency: int = 5) -> dict:
+async def process_many(claim_ids: list[str], concurrency: int = 5, use_llm: bool = False) -> dict:
+    """Bulk processing defaults to deterministic mode: LLM agents per claim at batch scale are slow and costly."""
     sem = asyncio.Semaphore(concurrency)
     done, failed = 0, 0
     actions: dict[str, int] = {}
@@ -76,7 +77,7 @@ async def process_many(claim_ids: list[str], concurrency: int = 5) -> dict:
         nonlocal done, failed
         async with sem:
             try:
-                out = await process_claim(cid)
+                out = await process_claim(cid, use_llm=use_llm)
                 actions[out["action"] or "none"] = actions.get(out["action"] or "none", 0) + 1
                 done += 1
             except Exception:  # noqa: BLE001 - recorded on the claim

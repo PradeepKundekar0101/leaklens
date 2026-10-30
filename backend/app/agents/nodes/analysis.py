@@ -100,7 +100,7 @@ def fan_out(state: ClaimState) -> list:
     """After load_policy: rules and anomaly always; one coverage task per group of up to 10 line items."""
     sends: list = [Send("rules", state), Send("anomaly", state)]
     items = state.get("line_items") or []
-    if get_settings().llm_enabled and items and state["claim"].get("product_id"):
+    if uses_llm(state) and items and state["claim"].get("product_id"):
         by_category: dict[str, list[dict]] = {}
         for li in items:
             by_category.setdefault(li["category"], []).append(li)
@@ -145,5 +145,9 @@ async def join(state: ClaimState) -> dict:
     return {"rules": rules_state, "route": "investigate" if tier == "high" else "standard"}
 
 
+def uses_llm(state: ClaimState) -> bool:
+    return get_settings().llm_enabled and state.get("use_llm", True)
+
+
 def route(state: ClaimState) -> str:
-    return "investigate" if state.get("route") == "investigate" else "decide"
+    return "investigate" if state.get("route") == "investigate" and uses_llm(state) else "decide"

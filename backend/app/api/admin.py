@@ -21,6 +21,7 @@ class BatchIn(BaseModel):
     limit: int = Field(default=100, ge=1, le=5000)
     concurrency: int = Field(default=5, ge=1, le=16)
     only_unprocessed: bool = True
+    use_llm: bool = Field(default=False, description="Run Claude agents per claim (slow and costly at batch scale)")
 
 
 @router.post("/process-batch", status_code=202)

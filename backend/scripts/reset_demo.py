@@ -102,7 +102,11 @@ async def main() -> None:
         await refresh_provider_stats(s)
         # The rest of the test split is processed in the background by the API's job worker (about 2 minutes),
         # followed by a provider-stats refresh, so the dashboard fills while the demo starts on the hero claims.
-        await enqueue(s, "process_batch", {"split": "test", "limit": 5000, "concurrency": 8, "only_unprocessed": True})
+        await enqueue(
+            s,
+            "process_batch",
+            {"split": "test", "limit": 5000, "concurrency": 8, "only_unprocessed": True, "use_llm": False},
+        )
         await enqueue(s, "provider_stats", {})
         await s.commit()
     print(
