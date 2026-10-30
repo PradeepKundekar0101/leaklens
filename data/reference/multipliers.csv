@@ -1,0 +1,13 @@
+factor_type,key,value,source
+city_tier,1,1.000,"illustrative, anchored on CGHS city classification (X / Y / Z) and PM-JAY tier differentials"
+city_tier,2,0.900,"illustrative, anchored on CGHS city classification (X / Y / Z) and PM-JAY tier differentials"
+city_tier,3,0.800,"illustrative, anchored on CGHS city classification (X / Y / Z) and PM-JAY tier differentials"
+hospital_tier,1,1.000,"illustrative: tertiary / corporate hospital"
+hospital_tier,2,0.850,"illustrative: mid-size multispeciality hospital"
+hospital_tier,3,0.720,"illustrative: nursing home / small hospital"
+nabh,true,1.000,"illustrative, anchored on CGHS NABH vs non-NABH rate differential (~15%)"
+nabh,false,0.850,"illustrative, anchored on CGHS NABH vs non-NABH rate differential (~15%)"
+room_category,general,1.000,"illustrative room-rent factor relative to a general ward bed"
+room_category,semi_private,1.600,"illustrative room-rent factor relative to a general ward bed"
+room_category,private,2.400,"illustrative room-rent factor relative to a general ward bed"
+room_category,deluxe,3.500,"illustrative room-rent factor relative to a general ward bed"

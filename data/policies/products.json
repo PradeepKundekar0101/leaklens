@@ -1,0 +1,56 @@
+{
+  "_comment": "Single source of truth for the three synthetic policy products. generate_data.py writes policy_products.csv / policy_params.csv from this file and generate_policy_docs.py renders the wording PDFs from it, so the wording and the parameters cannot drift. clause_refs are derived from the fixed wording structure in backend/scripts/datagen/products.py.",
+  "products": [
+    {
+      "id": "SILVER",
+      "name": "Suraksha Health Silver",
+      "version": "1.0",
+      "uin": "LLSHLIP26001V012526",
+      "sum_insured_options": ["300000.00", "500000.00"],
+      "room_rent_cap_pct": "1.000",
+      "icu_cap_pct": "2.000",
+      "copay_pct": "10.000",
+      "deductible": "0.00",
+      "sub_limits": {
+        "PR_CATARACT": "50000.00",
+        "PR_HERNIA": "120000.00",
+        "PR_NORMAL_DELIVERY": "60000.00",
+        "PR_CSECTION": "100000.00"
+      },
+      "waiting_periods": {"initial_days": 30, "listed_conditions_months": 24, "pre_existing_months": 36}
+    },
+    {
+      "id": "GOLD",
+      "name": "Suraksha Health Gold",
+      "version": "1.0",
+      "uin": "LLSHLIP26002V012526",
+      "sum_insured_options": ["500000.00", "1000000.00"],
+      "room_rent_cap_pct": "2.000",
+      "icu_cap_pct": "4.000",
+      "copay_pct": "0.000",
+      "deductible": "10000.00",
+      "sub_limits": {
+        "PR_CATARACT": "75000.00",
+        "PR_NORMAL_DELIVERY": "80000.00",
+        "PR_CSECTION": "125000.00"
+      },
+      "waiting_periods": {"initial_days": 30, "listed_conditions_months": 24, "pre_existing_months": 36}
+    },
+    {
+      "id": "PLATINUM",
+      "name": "Suraksha Health Platinum",
+      "version": "1.0",
+      "uin": "LLSHLIP26003V012526",
+      "sum_insured_options": ["1000000.00", "2000000.00"],
+      "room_rent_cap_pct": null,
+      "icu_cap_pct": null,
+      "copay_pct": "0.000",
+      "deductible": "0.00",
+      "sub_limits": {
+        "PR_NORMAL_DELIVERY": "100000.00",
+        "PR_CSECTION": "150000.00"
+      },
+      "waiting_periods": {"initial_days": 30, "listed_conditions_months": 24, "pre_existing_months": 36}
+    }
+  ]
+}

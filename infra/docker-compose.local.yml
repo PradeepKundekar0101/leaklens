@@ -1,0 +1,21 @@
+# Offline fallback Postgres with pgvector. Point DATABASE_URL at port 5433 to use it:
+#   DATABASE_URL=postgresql+psycopg://leaklens:leaklens@localhost:5433/leaklens
+#   DATABASE_URL_DIRECT=postgresql://leaklens:leaklens@localhost:5433/leaklens
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.0-pg17
+    environment:
+      POSTGRES_USER: leaklens
+      POSTGRES_PASSWORD: leaklens
+      POSTGRES_DB: leaklens
+    ports:
+      - "5433:5432"
+    volumes:
+      - leaklens-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leaklens"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  leaklens-pg:

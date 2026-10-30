@@ -1,0 +1,70 @@
+# DigitalOcean App Platform spec (region BLR1). Secrets are set as encrypted env vars in the DO console / doctl,
+# never committed. Deploy: doctl apps create --spec infra/app-spec.yaml (then doctl apps update <id> --spec ...).
+name: leaklens
+region: blr
+services:
+  - name: api
+    github:
+      repo: OWNER/leaklens
+      branch: main
+      deploy_on_push: true
+    source_dir: backend
+    dockerfile_path: backend/Dockerfile
+    http_port: 8000
+    instance_size_slug: apps-s-2vcpu-4gb
+    instance_count: 1
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 20
+    routes:
+      - path: /api
+        preserve_path_prefix: true
+      - path: /health
+        preserve_path_prefix: true
+    envs:
+      - { key: APP_ENV, value: demo }
+      - { key: DATABASE_URL, scope: RUN_AND_BUILD_TIME, type: SECRET }        # pooled URL, ?sslmode=require
+      - { key: DATABASE_URL_DIRECT, scope: RUN_AND_BUILD_TIME, type: SECRET } # direct URL for LangGraph
+      - { key: DB_POOL_MODE, value: transaction }
+      - { key: STORAGE_BACKEND, value: spaces }
+      - { key: SPACES_ENDPOINT, value: https://blr1.digitaloceanspaces.com }
+      - { key: SPACES_REGION, value: blr1 }
+      - { key: SPACES_BUCKET, value: leaklens-files }
+      - { key: SPACES_KEY, type: SECRET }
+      - { key: SPACES_SECRET, type: SECRET }
+      - { key: ANTHROPIC_API_KEY, type: SECRET }
+      - { key: MODEL_REASONING, value: claude-sonnet-5-5 }
+      - { key: MODEL_FAST, value: claude-haiku-5-5 }
+      - { key: VOYAGE_API_KEY, type: SECRET }
+      - { key: LANGSMITH_API_KEY, type: SECRET }
+      - { key: LANGSMITH_PROJECT, value: leaklens }
+      - { key: LANGSMITH_TRACING, value: "true" }
+      - { key: JWT_SECRET, type: SECRET }
+      - { key: COOKIE_SECURE, value: "true" }
+      - { key: CORS_ORIGINS, value: "${web.PUBLIC_URL}" }
+  - name: web
+    github:
+      repo: OWNER/leaklens
+      branch: main
+      deploy_on_push: true
+    source_dir: frontend
+    build_command: pnpm install --frozen-lockfile && pnpm build
+    run_command: pnpm start
+    http_port: 3000
+    instance_size_slug: apps-s-1vcpu-1gb
+    routes:
+      - path: /
+    envs:
+      # The web app proxies /api to the backend through Next.js rewrites, so cookies stay first-party.
+      - { key: NEXT_PUBLIC_API_URL, value: "${api.PRIVATE_URL}", scope: RUN_AND_BUILD_TIME }
+jobs:
+  - name: migrate
+    kind: PRE_DEPLOY
+    github:
+      repo: OWNER/leaklens
+      branch: main
+    source_dir: backend
+    dockerfile_path: backend/Dockerfile
+    run_command: uv run --no-sync alembic upgrade head
+    envs:
+      - { key: DATABASE_URL, type: SECRET }
