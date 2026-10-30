@@ -54,8 +54,15 @@ Add the keys to `.env`, restart, and re-run `make ingest` to switch to Claude an
 | `make reset-demo` | Reset analysis state and pre-process the five hero claims |
 | `make test` / `make lint` | Backend pytest + frontend vitest / ruff + ESLint + tsc |
 
+## Deployment (DigitalOcean)
+
+- App: https://shark-app-fmzpb.ondigitalocean.app (App Platform, BLR1): `api` (Docker, FastAPI and job worker) and `web` (Next.js) on one domain, with a pre-deploy `migrate` job.
+- Postgres `leaklens-pg` (BLR1, Postgres 17, pgvector): the app connects as non-superuser `leaklens_app` through a PgBouncer transaction pool; LangGraph and migrations use the direct URL. Trusted sources: the app and the developer IP.
+- Spaces bucket `leaklens-files` (SGP1, private): accessed with a key limited to that bucket.
+- Deployment values live in the gitignored `.env.do`. To redeploy after changing the spec: `python3 infra/render_spec.py > /tmp/spec.yaml && doctl apps update <app-id> --spec /tmp/spec.yaml`; for code changes: `doctl apps create-deployment <app-id>`.
+- Deployed demo accounts use `SEED_PASSWORD` from `.env.do`, not the local seed password.
+
 ## Status
 
-All phases (0-10) are implemented locally.
-Deployment to DigitalOcean is prepared (`backend/Dockerfile`, `infra/app-spec.yaml`, CI in `.github/workflows/ci.yml`) but not provisioned.
+All phases (0-10) are implemented, and the app is deployed to DigitalOcean.
 Results of the last local verification run are in `docs/verification.md`.

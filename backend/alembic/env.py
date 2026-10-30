@@ -27,6 +27,16 @@ import app.db.models  # noqa: F401,E402
 config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
+# Tables owned by LangGraph (checkpointer and store create them through setup()); never autogenerate drops for them.
+LANGGRAPH_TABLES = {"checkpoints", "checkpoint_blobs", "checkpoint_writes", "checkpoint_migrations", "store",
+                    "store_vectors", "store_migrations", "vector_migrations"}
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    table = obj if type_ == "table" else getattr(obj, "table", None)
+    table_name = name if type_ == "table" else getattr(table, "name", None)
+    return table_name not in LANGGRAPH_TABLES
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -49,6 +59,7 @@ def run_migrations_offline() -> None:
     context.configure(
         url=url,
         target_metadata=target_metadata,
+        include_object=include_object,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -58,7 +69,7 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(connection=connection, target_metadata=target_metadata, include_object=include_object)
 
     with context.begin_transaction():
         context.run_migrations()

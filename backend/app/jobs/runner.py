@@ -2,9 +2,15 @@
 
 Workers claim jobs with SELECT ... FOR UPDATE SKIP LOCKED, run the registered handler and record
 the result or error. Failed jobs are retried until job_max_attempts (1 run + 2 retries by default).
+
+Leases: a running job's worker refreshes heartbeat_at every HEARTBEAT_SECONDS. A job whose heartbeat is older
+than LEASE_SECONDS (its process crashed or was replaced by a deploy) goes back to the queue. Finishing is
+conditional on still holding the lease (same attempt), so a stale worker can never overwrite a retried job.
 """
 
 import asyncio
+import json
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -41,7 +47,7 @@ async def enqueue(session: AsyncSession, job_type: str, payload: dict[str, Any] 
 
 _CLAIM_SQL = text(
     """
-    UPDATE jobs SET status = 'running', started_at = now(), attempts = attempts + 1
+    UPDATE jobs SET status = 'running', started_at = now(), heartbeat_at = now(), attempts = attempts + 1
     WHERE id = (
         SELECT id FROM jobs WHERE status = 'queued'
         ORDER BY created_at, id
@@ -60,15 +66,64 @@ async def claim_one() -> tuple[int, str, dict, int] | None:
         return (row.id, row.type, row.payload, row.attempts) if row else None
 
 
-async def _finish(job_id: int, status: str, result: Any = None, error: str | None = None) -> None:
+HEARTBEAT_SECONDS = 20
+LEASE_SECONDS = 90
+
+_FINISH_SQL = text(
+    """
+    UPDATE jobs SET status = :status, result = CAST(:result AS jsonb), error = :error, finished_at = :finished_at
+    WHERE id = :id AND attempts = :attempt AND status = 'running'
+    """
+)
+_HEARTBEAT_SQL = text(
+    "UPDATE jobs SET heartbeat_at = now() WHERE id = :id AND attempts = :attempt AND status = 'running'"
+)
+_RECOVER_SQL = text(
+    f"""
+    UPDATE jobs SET status = 'queued'
+    WHERE status = 'running' AND COALESCE(heartbeat_at, started_at) < now() - interval '{LEASE_SECONDS} seconds'
+    """
+)
+
+
+async def _finish(job_id: int, attempt: int, status: str, result: Any = None, error: str | None = None) -> bool:
+    """Records the outcome only if this worker still holds the job's lease."""
     async with session_scope() as session:
-        job = await session.get(Job, job_id)
-        assert job is not None
-        job.status = status
-        job.result = to_jsonable(result) if result is not None else None
-        job.error = error
-        job.finished_at = datetime.now(UTC) if status in ("done", "failed") else None
+        res = await session.execute(
+            _FINISH_SQL,
+            {
+                "id": job_id,
+                "attempt": attempt,
+                "status": status,
+                "result": json.dumps(to_jsonable(result)) if result is not None else None,
+                "error": error,
+                "finished_at": datetime.now(UTC) if status in ("done", "failed") else None,
+            },
+        )
         await session.commit()
+    if res.rowcount == 0:
+        log.warning("job_lease_lost", job_id=job_id, attempt=attempt)
+    return res.rowcount == 1
+
+
+async def _heartbeat(job_id: int, attempt: int) -> None:
+    while True:
+        await asyncio.sleep(HEARTBEAT_SECONDS)
+        try:
+            async with session_scope() as session:
+                await session.execute(_HEARTBEAT_SQL, {"id": job_id, "attempt": attempt})
+                await session.commit()
+        except Exception:  # noqa: BLE001 - a missed beat is tolerated; the lease is 90 s
+            log.warning("job_heartbeat_failed", job_id=job_id)
+
+
+async def recover_expired() -> int:
+    async with session_scope() as session:
+        res = await session.execute(_RECOVER_SQL)
+        await session.commit()
+    if res.rowcount:
+        log.warning("jobs_requeued_after_lease_expiry", count=res.rowcount)
+    return res.rowcount
 
 
 async def run_one() -> bool:
@@ -79,16 +134,19 @@ async def run_one() -> bool:
     job_id, job_type, payload, attempts = claimed
     fn = HANDLERS.get(job_type)
     if fn is None:
-        await _finish(job_id, "failed", error=f"no handler for job type {job_type!r}")
+        await _finish(job_id, attempts, "failed", error=f"no handler for job type {job_type!r}")
         return True
+    beat = asyncio.create_task(_heartbeat(job_id, attempts))
     try:
         result = await fn(payload)
     except Exception as exc:  # noqa: BLE001 - the error is recorded on the job
         log.exception("job_failed", job_id=job_id, job_type=job_type, attempt=attempts)
         retry = attempts < get_settings().job_max_attempts
-        await _finish(job_id, "queued" if retry else "failed", error=f"{type(exc).__name__}: {exc}")
+        await _finish(job_id, attempts, "queued" if retry else "failed", error=f"{type(exc).__name__}: {exc}")
         return True
-    await _finish(job_id, "done", result=result)
+    finally:
+        beat.cancel()
+    await _finish(job_id, attempts, "done", result=result)
     return True
 
 
@@ -108,7 +166,14 @@ class Worker:
 
     async def _loop(self, n: int) -> None:
         interval = get_settings().job_poll_interval
+        last_recovery = time.monotonic()
         while not self._stop.is_set():
+            if n == 0 and time.monotonic() - last_recovery > LEASE_SECONDS / 2:
+                last_recovery = time.monotonic()
+                try:
+                    await recover_expired()
+                except Exception:  # noqa: BLE001
+                    log.exception("job_recovery_failed")
             try:
                 worked = await run_one()
             except Exception:  # noqa: BLE001 - keep the worker alive on database hiccups
@@ -120,18 +185,8 @@ class Worker:
                 except TimeoutError:
                     pass
 
-    async def _recover_stale(self) -> None:
-        """Jobs left 'running' by a stopped process (crash or redeploy) go back to the queue.
-
-        Assumes one worker process per database, which is how the app is deployed (a single API instance runs the
-        worker). With several instances this would re-queue jobs another instance is still running.
-        """
-        async with session_scope() as session:
-            await session.execute(text("UPDATE jobs SET status='queued' WHERE status='running'"))
-            await session.commit()
-
     async def start(self) -> None:
-        await self._recover_stale()
+        await recover_expired()
         self._tasks = [asyncio.create_task(self._loop(i)) for i in range(self.concurrency)]
         log.info("worker_started", concurrency=self.concurrency)
 

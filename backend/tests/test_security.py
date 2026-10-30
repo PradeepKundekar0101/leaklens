@@ -167,3 +167,51 @@ async def test_failing_job_retries_then_fails(migrated):
         assert job.status == "failed"
         assert job.attempts == 3
         assert "boom" in job.error
+
+
+async def test_lease_recovery_requeues_only_silent_jobs(migrated):
+    from sqlalchemy import text
+
+    from app.db.models import Job
+    from app.db.session import session_scope
+    from app.jobs.runner import recover_expired
+
+    async with session_scope() as s:
+        stale = Job(type="noop", status="running", payload={}, attempts=1)
+        live = Job(type="noop", status="running", payload={}, attempts=1)
+        s.add_all([stale, live])
+        await s.flush()
+        await s.execute(
+            text(
+                "UPDATE jobs SET started_at = now() - interval '10 minutes', "
+                "heartbeat_at = now() - interval '5 minutes' WHERE id = :id"
+            ),
+            {"id": stale.id},
+        )
+        await s.execute(
+            text("UPDATE jobs SET started_at = now() - interval '10 minutes', heartbeat_at = now() WHERE id = :id"),
+            {"id": live.id},
+        )
+        await s.commit()
+        ids = stale.id, live.id
+    await recover_expired()
+    async with session_scope() as s:
+        assert (await s.get(Job, ids[0])).status == "queued"  # silent for 5 minutes: its worker is gone
+        assert (await s.get(Job, ids[1])).status == "running"  # still heartbeating: left alone
+
+
+async def test_stale_worker_cannot_overwrite_a_retried_job(migrated):
+    from app.db.models import Job
+    from app.db.session import session_scope
+    from app.jobs.runner import _finish
+
+    async with session_scope() as s:
+        job = Job(type="noop", status="running", payload={}, attempts=2)  # retried: now on attempt 2
+        s.add(job)
+        await s.commit()
+        job_id = job.id
+    assert await _finish(job_id, 1, "done", result={"from": "old worker"}) is False
+    assert await _finish(job_id, 2, "done", result={"from": "current worker"}) is True
+    async with session_scope() as s:
+        job = await s.get(Job, job_id)
+        assert job.status == "done" and job.result == {"from": "current worker"}

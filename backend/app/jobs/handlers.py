@@ -29,7 +29,7 @@ async def process_batch(payload: dict) -> dict:
     async with session_scope() as session:
         q = select(Claim.id).where(Claim.split == split)
         if payload.get("only_unprocessed", True):
-            q = q.where(Claim.status == "received")
+            q = q.where(Claim.status.in_(("received", "failed")))  # failed claims are retried
         ids = list((await session.execute(q.order_by(Claim.id).limit(limit))).scalars())
     result = await process_many(
         ids, concurrency=int(payload.get("concurrency", 5)), use_llm=bool(payload.get("use_llm", False))

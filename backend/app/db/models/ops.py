@@ -35,6 +35,7 @@ class Job(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[CreatedAt]
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # lease: refreshed while running
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

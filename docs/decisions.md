@@ -116,3 +116,6 @@ For R06 and R08 (full-claim findings) the payable is 0 and the whole claimed amo
   Single-claim processing, demo claims and live claims use every agent. Running the agents across thousands of claims is slow (Voyage rate limits) and costly; pass `use_llm: true` to `POST /admin/process-batch` to override.
 - **Migrations use the direct database URL**; the API uses DO's PgBouncer pool in transaction mode (prepared statements disabled), and LangGraph uses the direct URL.
 - **Deployed demo accounts use a generated password** (not the local seed password, which is public in this repository).
+- **Job leases.** App Platform runs the old and new instance side by side during a deploy, so "re-queue running jobs at startup" let two instances process the same batch.
+  Running jobs now refresh `heartbeat_at` every 20 s; only jobs silent for 90 s are re-queued, and a worker can only record a result while it still holds the lease (same attempt number).
+- **Alembic ignores LangGraph's tables** (`checkpoints*`, `store*`); autogenerate otherwise proposes dropping them.

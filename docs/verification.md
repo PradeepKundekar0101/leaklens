@@ -13,11 +13,11 @@ First pass ran without API keys (deterministic fallbacks); the second pass, reco
 
 | Phase | Criterion | Result |
 | --- | --- | --- |
-| 0 | `/health` OK for database and storage | Pass (local) |
-| 0 | Sidebar differs by role | Pass (browser, all four roles) |
-| 0 | No cookie -> 401, wrong role -> 403 | Pass (tests) |
-| 0 | Migrations clean on local fallback | Pass; DO Postgres not provisioned |
-| 0 | Test job enqueued, processed, done | Pass (test) |
+| 0 | `/health` OK for database and storage | Pass on the deployed URL (Postgres 17.11 in BLR1, Spaces in SGP1) |
+| 0 | Sidebar differs by role | Pass locally in the browser; on the deployed URL all four roles sign in and get role-correct API access (the deployed sidebar is not yet checked in a browser) |
+| 0 | No cookie -> 401, wrong role -> 403 | Pass (tests, and against the deployed URL) |
+| 0 | Migrations run cleanly on DO Postgres and on the local fallback | Pass (also run by the App Platform pre-deploy job) |
+| 0 | Test job enqueued, processed and marked done | Pass (test, and on the deployed worker) |
 | 1 | Generation < 60 s, loading < 2 min | 6.1 s and 11-16 s |
 | 1 | Line items sum exactly; no out-of-stay dates except planted; same seed identical | Pass (tests) |
 | 1 | Calibration 5-10% planted leakage | 6.81% |
@@ -52,8 +52,10 @@ First pass ran without API keys (deterministic fallbacks); the second pass, reco
 | 9 | Over-billing providers rank top 2 by O/E index | Pass (H016 1.357, H005 1.347; next 1.166) |
 | 9 | Dashboard totals reconcile with recommendations | Pass (test + live check) |
 | 10 | Role check on every route | Pass (test enumerates routes) |
-| 10 | `reset_demo` < 1 minute | 2.7 s (rest of the test split re-processes in the background, ~2.5 min) |
-| 10 | Deploy to DO, LangSmith datasets, backup video | Not done (local-only build by decision) |
+| 10 | `reset_demo` < 1 minute | Locally 2.7 s with deterministic processing. On DO with every Claude agent on the five demo claims: about 20 minutes, dominated by the Voyage free-tier rate limit |
+| 10 | Backend image with Docling models, App Platform spec with `/health` check and migrations on deploy | Pass |
+| 10 | Fresh deploy from `main` without manual steps | Partly: deploys build from the public repo over HTTPS, triggered by `doctl apps create-deployment` (no deploy-on-push without the GitHub integration) |
+| 10 | LangSmith datasets, CI on GitHub, backup video | Not done |
 
 ## Detection evaluation (test split, model v20261030-134213)
 
