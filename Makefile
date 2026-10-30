@@ -1,7 +1,7 @@
 BACKEND := cd backend &&
 PY := $(BACKEND) uv run
 
-.PHONY: dev dev-backend dev-frontend test lint format migrate seed-users generate load train evaluate ingest reset-demo setup
+.PHONY: dev dev-backend dev-frontend test lint format migrate seed-users generate load train evaluate ingest reference reset-demo setup
 
 setup: migrate seed-users generate load train ingest reset-demo  ## everything from an empty database
 
@@ -49,6 +49,10 @@ evaluate:
 
 ingest:
 	$(PY) python -m scripts.ingest_policy
+
+reference:  ## IRDAI-layout reference wording: render and ingest as product PUBLIC
+	$(PY) python -m scripts.generate_reference_wording
+	$(PY) python -m scripts.ingest_policy --file ../data/policies/public/SWASTHYA_RAKSHA_PLUS.pdf --product PUBLIC
 
 reset-demo:
 	$(PY) python -m scripts.reset_demo

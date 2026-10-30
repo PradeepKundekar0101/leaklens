@@ -14,7 +14,7 @@ from app.db.models import PolicyChunk, PolicyProduct
 from app.services.documents.parse import docling_options
 from app.services.llm import client as llm
 from app.services.llm.schemas import ClauseType
-from app.services.policy.chunker import Block, Chunk, chunk_blocks, classify_heuristic
+from app.services.policy.chunker import Block, Chunk, chunk_blocks, classify_heuristic, clause_start, detect_scheme
 from app.services.policy.embed import active_model, embed
 from app.storage import spaces
 
@@ -46,19 +46,20 @@ def _docling_blocks(pdf_path: Path) -> list[Block]:
 
 
 def _pdfium_blocks(pdf_path: Path) -> list[Block]:
-    """Fallback when Docling fails: one block per text line, with page numbers."""
+    """Fallback when Docling fails: lines joined into paragraphs that break at clause numbers, with page numbers."""
     import pypdfium2 as pdfium
 
     pdf = pdfium.PdfDocument(str(pdf_path))
+    pages = [
+        [ln.strip() for ln in pdf[i].get_textpage().get_text_range().splitlines() if ln.strip()]
+        for i in range(len(pdf))
+    ]
+    scheme = detect_scheme([ln for page in pages for ln in page])
     blocks = []
-    for i in range(len(pdf)):
-        text = pdf[i].get_textpage().get_text_range()
+    for i, lines in enumerate(pages):
         paragraph = ""
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            if paragraph and (line[:1].isdigit() and line.split(" ")[0].replace(".", "").isdigit()):
+        for line in lines:
+            if paragraph and clause_start(line, scheme):
                 blocks.append(Block(paragraph, i + 1))
                 paragraph = ""
             paragraph = f"{paragraph} {line}".strip()

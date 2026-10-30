@@ -54,6 +54,8 @@ dev = [
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+# Alembic migrations are generated, and env.py follows the Alembic template; `make lint` never covered them.
+extend-exclude = ["alembic"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "ASYNC"]
@@ -68,6 +70,11 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 markers = ["slow: long-running tests", "db: needs the test database"]
+# Docling 2.145 reads its own deprecated option fields internally even with default settings (we set neither).
+filterwarnings = [
+    "ignore:`force_full_page_ocr` is deprecated:DeprecationWarning",
+    "ignore:This field is deprecated. Use `generate_page_images=True`:DeprecationWarning",
+]
 
 # CPU-only PyTorch on Linux (Docker / App Platform): Docling needs no GPU, and the CUDA wheels add several GB.
 [[tool.uv.index]]

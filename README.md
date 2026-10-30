@@ -51,6 +51,7 @@ Add the keys to `.env`, restart, and re-run `make ingest` to switch to Claude an
 | `make train` | Peer statistics + Isolation Forest, registered, activated, evaluated |
 | `make evaluate` | Rules recall/precision and the anomaly comparison table on the test split |
 | `make ingest` | Chunk, classify and embed policy wordings; extract parameters for approval |
+| `make reference` | Render the 30-page IRDAI-layout reference wording and ingest it as product `PUBLIC` |
 | `make reset-demo` | Reset analysis state and pre-process the five hero claims |
 | `make test` / `make lint` | Backend pytest + frontend vitest / ruff + ESLint + tsc |
 

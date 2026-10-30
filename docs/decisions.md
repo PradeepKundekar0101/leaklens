@@ -108,6 +108,16 @@ For R06 and R08 (full-claim findings) the payable is 0 and the whole claimed amo
 - **Embedding rate limits.** Voyage requests are batched under 8K estimated tokens and retried with backoff on 429s; query embeddings are cached in-process.
 - **Clause-note namespaces** encode clause numbers (`4.2` -> `4_2`) because store namespace labels cannot contain periods.
 
+## Policy wordings
+
+- **Reference wording in place of a real insurer's PDF.** `data/policies/public/SWASTHYA_RAKSHA_PLUS.pdf` (30 pages, `make reference`) is a fictional insurer's three-plan product in the IRDAI standard layout: lettered sections, clause numbers such as `C.1.4`, definitions as `Def. n` in two columns, exclusion codes `Excl01`-`Excl18`, plan comparison tables and form-style annexures.
+  Its text is original, every page is marked as a specimen, and it is ingested as reference product `PUBLIC` (no approved parameters, so no claims use it).
+  It tests layout and numbering the pipeline was not built around; a real insurer's wording remains the stronger test and can be dropped into the same folder.
+- **Two numbering schemes in the chunker.** A document with at least five lettered clause numbers is treated as lettered: `Section C - ...` opens a section, `C.1.2` a clause, `Def. 12` a definition, and numbered list items are body text.
+  Otherwise the numeric scheme applies (`4 Limits`, `4.2 Room rent`).
+  `Annexure N - ...` opens its own chunk in both schemes, so annexure lists are cited as the annexure instead of being attached to the last numbered clause.
+- **No diagonal watermark on the reference wording.** A text watermark scrambled Docling's reading order (clause bodies landed under the wrong headings), and real wordings rarely carry one.
+
 ## Deployment
 
 - **Spaces bucket in SGP1, not BLR1.** Spaces was not available in BLR1 for this account, so the bucket `leaklens-files` is in Singapore; Postgres stays in BLR1.

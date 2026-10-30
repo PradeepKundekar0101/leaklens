@@ -43,7 +43,8 @@ First pass ran without API keys (deterministic fallbacks); the second pass, reco
 | 6 | Prompt-injection canary has no effect | Pass (test, deterministic path) |
 | 7 | "room rent limit" returns the room-rent clause first | Pass (clause 4.2 for all three products) |
 | 7 | Extracted parameters match `policy_params` exactly | Pass: 30/30 values across the three products, all returned clause references agree |
-| 7 | Golden set (30 labelled line items) and public policy PDF | Not done: no hand-labelled golden set yet; no public policy PDF supplied in `data/policies/public/` |
+| 7 | Golden set (30 labelled line items) | Not done: no hand-labelled golden set yet |
+| 7 | Wording in an unfamiliar layout ingests and retrieves | Pass on the IRDAI-layout reference wording (no real insurer PDF yet): 173 chunks covering every clause `A.1`-`G.3`, all 56 definitions and 5 annexures; 12/12 retrieval questions hit@3, 10/12 first; `Room Rent` resolves to `Def. 43`. The first run exposed that the chunker only understood numeric numbering (33 chunks, all clause `0`); fixed |
 | 7 | No unverified citation displayed as verified | Pass (verification unit test; UI shows verified state only when `verified=true`) |
 | 8 | Investigator report cites ≥ 3 different tool results | Pass on high-risk claim C0029951 (peer distribution, similar cases, documents) |
 | 8 | Override note appears in the coverage agent's context | Pass (API test: override note is returned by `get_clause_notes`) |
