@@ -4,8 +4,8 @@ Environment: macOS, Postgres 17.9 + pgvector 0.8.7 (Homebrew), local storage bac
 
 ## Automated tests
 
-- Backend: `uv run pytest` - 84 tests (rules, payable calculator, anomaly statistics, guardrails, PII masking, action policy, citation verification, security and role coverage, read-only tools, job queue, orchestrator integration incl. restart-and-resume, document pipeline incl. prompt-injection canary and reused-bill detection, synthetic-data invariants).
-- Frontend: `pnpm test` (48 vitest tests), `pnpm lint`, `pnpm typecheck`, `pnpm build`.
+- Backend: `uv run pytest` - 83 tests (rules, payable calculator, anomaly statistics, guardrails, PII masking, action policy, citation verification, security and role coverage, read-only tools, job queue, orchestrator integration incl. restart-and-resume, document pipeline incl. prompt-injection canary and reused-bill detection, synthetic-data invariants).
+- Frontend: `pnpm test` (66 vitest tests), `pnpm lint`, `pnpm typecheck`, `pnpm build`.
 - Lint: `ruff check` and `ruff format --check` clean.
 
 ## Phase acceptance results
