@@ -121,14 +121,13 @@ class Worker:
                     pass
 
     async def _recover_stale(self) -> None:
-        """Jobs left 'running' by a crashed process go back to the queue."""
+        """Jobs left 'running' by a stopped process (crash or redeploy) go back to the queue.
+
+        Assumes one worker process per database, which is how the app is deployed (a single API instance runs the
+        worker). With several instances this would re-queue jobs another instance is still running.
+        """
         async with session_scope() as session:
-            await session.execute(
-                text(
-                    "UPDATE jobs SET status='queued' "
-                    "WHERE status='running' AND started_at < now() - interval '10 minutes'"
-                )
-            )
+            await session.execute(text("UPDATE jobs SET status='queued' WHERE status='running'"))
             await session.commit()
 
     async def start(self) -> None:

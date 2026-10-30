@@ -31,9 +31,17 @@ async def process_batch(payload: dict) -> dict:
         if payload.get("only_unprocessed", True):
             q = q.where(Claim.status == "received")
         ids = list((await session.execute(q.order_by(Claim.id).limit(limit))).scalars())
-    return await process_many(
+    result = await process_many(
         ids, concurrency=int(payload.get("concurrency", 5)), use_llm=bool(payload.get("use_llm", False))
     )
+    if payload.get("refresh_provider_stats", True):
+        # In the same job, so provider stats always reflect the batch (jobs run concurrently, not in order).
+        from app.services.portfolio import refresh_provider_stats
+
+        async with session_scope() as session:
+            result["provider_stats_rows"] = await refresh_provider_stats(session)
+            await session.commit()
+    return result
 
 
 @handler("parse_document")
