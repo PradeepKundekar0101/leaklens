@@ -97,7 +97,7 @@ async def main() -> None:
     await runtime.startup()
     await scorer.load_active()
     heroes = await pick_heroes()
-    results = await asyncio.gather(*(processing.process_claim(cid) for cid in heroes.values()))
+    results = [await processing.process_claim(cid) for cid in heroes.values()]  # sequential: small DB, rate limits
     async with session_scope() as s:
         await refresh_provider_stats(s)
         # The rest of the test split is processed in the background by the API's job worker (about 2 minutes),

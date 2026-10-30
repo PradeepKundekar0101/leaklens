@@ -53,8 +53,10 @@ async def search(
     clause_type: str | None = None,
     top: int = TOP,
     expand_definitions: bool = True,
+    query_vector: list[float] | None = None,
 ) -> list[dict]:
-    q_vec = await embed_query(query)
+    """Pass query_vector when the caller holds a database connection: embedding can wait on API rate limits."""
+    q_vec = query_vector if query_vector is not None else await embed_query(query)
     params = {"product_id": product_id, "clause_type": clause_type, "n": CANDIDATES}
     vector_ids = [
         r.id

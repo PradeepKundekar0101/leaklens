@@ -33,6 +33,7 @@ from app.services.jsonsafe import to_jsonable
 from app.services.llm.client import Tool
 from app.services.llm.prompts import wrap_untrusted
 from app.services.policy import search as policy_search
+from app.services.policy.embed import embed_query
 
 
 # ---- inputs -------------------------------------------------------------------------------------------------------
@@ -87,8 +88,9 @@ class DocumentTextIn(BaseModel):
 
 # ---- implementations ----------------------------------------------------------------------------------------------
 async def search_policy(args: SearchPolicyIn) -> dict:
+    vector = await embed_query(args.query)  # before taking a connection: embedding may wait on rate limits
     async with readonly_session() as s:
-        chunks = await policy_search.search(s, args.product_id, args.query, args.clause_type)
+        chunks = await policy_search.search(s, args.product_id, args.query, args.clause_type, query_vector=vector)
     return {
         "chunks": [
             {k: c.get(k) for k in ("clause_no", "section_path", "page", "text", "definitions") if c.get(k) is not None}

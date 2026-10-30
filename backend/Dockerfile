@@ -10,10 +10,13 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Download Docling's layout and table models at build time so the first parse on demo day is fast.
-RUN uv run docling-tools models download -o /opt/models/docling
+RUN uv run --no-sync docling-tools models download -o /opt/models/docling
 
 COPY . .
-RUN uv sync --frozen --no-dev && useradd --system --uid 10001 app && chown -R app /app
+RUN uv sync --frozen --no-dev && useradd --system --uid 10001 --no-create-home app
+# Code and the virtualenv stay root-owned (read-only for the app); a recursive chown would duplicate the whole
+# virtualenv into another layer. Libraries that cache to disk get writable locations under /tmp.
+ENV HOME=/tmp NUMBA_CACHE_DIR=/tmp/numba HF_HOME=/tmp/hf MPLCONFIGDIR=/tmp/mpl
 USER app
 EXPOSE 8000
 # Migrations run as the App Platform pre-deploy job (see infra/app-spec.yaml).
