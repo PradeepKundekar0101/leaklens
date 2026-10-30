@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://localhost:5432/leaklens"
     database_url_direct: str = ""
     db_pool_mode: Literal["session", "transaction"] = "session"
+    # Small defaults: a 1 GB managed Postgres node has ~22 connection slots shared by every process.
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
+    langgraph_pool_size: int = 4
 
     storage_backend: Literal["local", "spaces"] = "local"
     local_storage_dir: Path = DATA_DIR / "storage"

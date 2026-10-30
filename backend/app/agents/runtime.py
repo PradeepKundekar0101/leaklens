@@ -30,7 +30,8 @@ async def startup() -> None:
     settings = get_settings()
     _pool = AsyncConnectionPool(
         conninfo=settings.direct_url,
-        max_size=10,
+        min_size=1,
+        max_size=settings.langgraph_pool_size,
         kwargs={"autocommit": True, "row_factory": dict_row, "prepare_threshold": 0},
         open=False,
     )
