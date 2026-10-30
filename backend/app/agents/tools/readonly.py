@@ -124,8 +124,13 @@ async def get_policy_params(args: ProductIn) -> dict:
     }
 
 
+def clause_namespace(product_id: str, clause_no: str) -> tuple[str, ...]:
+    """Store namespace for adjuster notes on a clause. Labels cannot contain '.', so 4.2 is stored as 4_2."""
+    return ("clauses", product_id, clause_no.replace(".", "_"))
+
+
 async def get_clause_notes(args: ClauseNotesIn) -> dict:
-    items = await runtime.store().asearch(("clauses", args.product_id, args.clause_no), limit=10)
+    items = await runtime.store().asearch(clause_namespace(args.product_id, args.clause_no), limit=10)
     return {"notes": [i.value for i in items]}
 
 

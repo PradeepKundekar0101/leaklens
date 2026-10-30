@@ -66,16 +66,45 @@ class ClauseType(BaseModel):
     clause_type: Literal["definition", "benefit", "exclusion", "waiting_period", "sub_limit", "procedure", "general"]
 
 
+class SubLimit(BaseModel):
+    procedure_code: str
+    limit: Decimal = Field(description="Rupee limit, digits only")
+    clause_no: str
+
+
+class ClauseRef(BaseModel):
+    param: str = Field(description="Parameter name, e.g. room_rent_cap_pct")
+    clause_no: str
+
+
 class ExtractedParams(BaseModel):
+    """Lists instead of maps: strict structured outputs cannot express free-form object keys."""
+
     room_rent_cap_pct: Decimal | None = None
     icu_cap_pct: Decimal | None = None
     copay_pct: Decimal = Decimal("0")
     deductible: Decimal = Decimal("0")
-    sub_limits: dict[str, Decimal] = Field(default_factory=dict, description="procedure code -> rupee limit")
+    sub_limits: list[SubLimit] = Field(default_factory=list)
     initial_days: int | None = None
     listed_conditions_months: int | None = None
     pre_existing_months: int | None = None
-    clause_refs: dict[str, str] = Field(default_factory=dict, description="parameter name -> clause number")
+    clause_refs: list[ClauseRef] = Field(default_factory=list)
+
+    def as_params(self) -> dict:
+        refs = {r.param: r.clause_no for r in self.clause_refs}
+        for s in self.sub_limits:
+            refs.setdefault(f"sub_limits.{s.procedure_code}", s.clause_no)
+        return {
+            "room_rent_cap_pct": self.room_rent_cap_pct,
+            "icu_cap_pct": self.icu_cap_pct,
+            "copay_pct": self.copay_pct,
+            "deductible": self.deductible,
+            "sub_limits": {s.procedure_code: s.limit for s in self.sub_limits},
+            "initial_days": self.initial_days,
+            "listed_conditions_months": self.listed_conditions_months,
+            "pre_existing_months": self.pre_existing_months,
+            "clause_refs": refs,
+        }
 
 
 class InvestigationFinding(BaseModel):

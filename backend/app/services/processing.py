@@ -7,9 +7,12 @@ from langgraph.types import Command
 
 from app.agents import runtime
 from app.core import audit
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.session import session_scope
+from app.services.anomaly import scorer
 from app.services.claims import set_status
+from app.services.rules.engine import RULES_VERSION
 
 log = get_logger(__name__)
 
@@ -18,7 +21,16 @@ async def process_claim(claim_id: str) -> dict:
     """Run the graph until the human-review interrupt. Re-processing starts a fresh thread."""
     await runtime.checkpointer().adelete_thread(f"claim:{claim_id}")
     run_id = uuid.uuid4().hex
-    config = runtime.thread_config(claim_id, run_id=run_id)
+    settings = get_settings()
+    active = scorer.get_scorer()
+    config = runtime.thread_config(
+        claim_id,
+        run_id=run_id,
+        model_reasoning=settings.model_reasoning,
+        model_fast=settings.model_fast,
+        anomaly_model=active.version if active else "none",
+        rules=RULES_VERSION,
+    )
     try:
         state = await runtime.graph().ainvoke({"claim_id": claim_id, "run_id": run_id}, config)
     except Exception as exc:

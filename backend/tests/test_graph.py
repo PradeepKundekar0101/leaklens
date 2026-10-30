@@ -333,3 +333,57 @@ async def test_dashboard_totals_reconcile_with_recommendations(seeded, client, u
         ).one()
     assert Decimal(kpis["leakage_identified"]) == total
     assert kpis["processed"] == n
+
+
+async def test_every_agent_tool_returns_data(seeded):
+    """Each read-only tool runs end to end against seeded data without raising or returning an error."""
+    from app.agents.tools import readonly as t
+
+    calls = [
+        t.get_member_history(t.MemberIn(member_id="M000070")),
+        t.get_provider_profile(t.ProviderIn(provider_id="H001")),
+        t.find_near_duplicates(t.ClaimIn(claim_id="DUPB")),
+        t.get_policy_params(t.ProductIn(product_id="GOLD")),
+        t.get_claim_state(t.ClaimIn(claim_id="ROOM1")),
+        t.get_peer_distribution(t.PeerIn(claim_id="ROOM1", feature="log_amount")),
+        t.get_document_text(t.DocumentTextIn(claim_id="ROOM1")),
+        t.search_similar_cases(t.SimilarCasesIn(query="appendectomy room rent")),
+        t.get_clause_notes(t.ClauseNotesIn(product_id="GOLD", clause_no="4.2")),
+    ]
+    for result in [await c for c in calls]:
+        assert "error" not in result, result
+    history = await t.get_member_history(t.MemberIn(member_id="M000072"))
+    assert {c["claim_id"] for c in history["claims"]} >= {"DUPA", "DUPB"}
+    dupes = await t.find_near_duplicates(t.ClaimIn(claim_id="DUPB"))
+    assert [d["claim_id"] for d in dupes["near_duplicates"]] == ["DUPA"]
+
+
+async def test_coverage_override_note_reaches_coverage_agent_tool(seeded, client, users):
+    from app.agents.tools import readonly as t
+    from app.db.models import CoverageFinding, LineItem
+    from app.db.session import session_scope
+
+    async with session_scope() as s:
+        line = (await s.execute(text("SELECT id FROM line_items WHERE claim_id = 'ROOM1' LIMIT 1"))).scalar_one()
+        finding = CoverageFinding(
+            claim_id="ROOM1",
+            line_item_id=line,
+            verdict="not_payable",
+            clause_no="4.2",
+            quote="x",
+            reason="r",
+            confidence=0.8,
+            verified=True,
+        )
+        s.add(finding)
+        await s.commit()
+        finding_id = finding.id
+        assert LineItem is not None
+    await login(client, users["adjuster"])
+    r = await client.post(
+        f"/api/v1/claims/ROOM1/coverage/{finding_id}/override",
+        json={"verdict": "payable", "note": "Private room is covered for this product tier"},
+    )
+    assert r.status_code == 200, r.text
+    notes = await t.get_clause_notes(t.ClauseNotesIn(product_id="GOLD", clause_no="4.2"))
+    assert any("Private room is covered" in n["text"] for n in notes["notes"])

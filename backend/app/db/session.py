@@ -65,4 +65,6 @@ async def readonly_session() -> AsyncIterator[AsyncSession]:
         try:
             yield session
         finally:
+            # Detach first: a rollback expires loaded objects, and tools often build their JSON after the block.
+            session.expunge_all()
             await session.rollback()

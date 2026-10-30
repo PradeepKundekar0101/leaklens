@@ -99,3 +99,11 @@ For R06 and R08 (full-claim findings) the payable is 0 and the whole claimed amo
 - **Reproducibility.** `policy_params.approved_at` is a fixed timestamp in the CSV so output is byte-identical per seed; `load_data` stamps `now()`.
 - **Loader.** Storage keys are deterministic (`uuid5` of claim and filename) so reloads overwrite instead of orphaning files, and stale keys are deleted.
 - The loader sets `lock_timeout = 15s` and, if the API or worker holds locks, exits with the blocking sessions listed instead of deadlocking.
+
+## LLM integration
+
+- **Structured outputs use lists, not maps.** Strict JSON-schema outputs require `additionalProperties: false`, so free-form maps (`sub_limits`, `clause_refs`) are returned as lists of objects and converted in code.
+- **Token floor and effort.** Current models think adaptively and thinking counts against `max_tokens`, so structured calls use at least 4,000 tokens and the fast model runs at low effort for classification and extraction.
+- **Explicit `ANTHROPIC_BASE_URL` setting** (default `https://api.anthropic.com`), so an inherited shell variable never redirects traffic.
+- **Embedding rate limits.** Voyage requests are batched under 8K estimated tokens and retried with backoff on 429s; query embeddings are cached in-process.
+- **Clause-note namespaces** encode clause numbers (`4.2` -> `4_2`) because store namespace labels cannot contain periods.

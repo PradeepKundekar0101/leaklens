@@ -565,6 +565,7 @@ async def override_coverage(
 ) -> dict:
     """Records the adjuster's interpretation as a clause note (memory) used by future coverage runs."""
     from app.agents import runtime
+    from app.agents.tools.readonly import clause_namespace
 
     f = await session.get(CoverageFinding, finding_id)
     if f is None or f.claim_id != claim_id:
@@ -575,7 +576,7 @@ async def override_coverage(
     f.overridden = {"from": f.verdict, "to": body.verdict, "note": body.note, "by": user.id}
     if f.clause_no:
         await runtime.store().aput(
-            ("clauses", mp.product_id, f.clause_no),
+            clause_namespace(mp.product_id, f.clause_no),
             f"{claim_id}:{finding_id}",
             {
                 "text": body.note,

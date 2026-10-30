@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     spaces_secret: str = ""
 
     anthropic_api_key: str = ""
+    # Explicit, so an ANTHROPIC_BASE_URL inherited from the shell never redirects API traffic.
+    anthropic_base_url: str = "https://api.anthropic.com"
     model_reasoning: str = "claude-sonnet-5-5"
     model_fast: str = "claude-haiku-5-5"
     llm_timeout_seconds: float = 30.0
@@ -86,6 +88,20 @@ class Settings(BaseSettings):
         return bool(self.voyage_api_key)
 
 
+def export_tracing_env(settings: Settings) -> None:
+    """LangSmith and LangGraph read tracing configuration from the process environment."""
+    import os
+
+    if settings.langsmith_tracing and settings.langsmith_api_key:
+        os.environ["LANGSMITH_TRACING"] = "true"
+        os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key
+        os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
+    else:
+        os.environ["LANGSMITH_TRACING"] = "false"
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    export_tracing_env(settings)
+    return settings

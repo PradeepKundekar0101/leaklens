@@ -5,11 +5,13 @@ and the memory store working offline. Vectors from the two backends are not comp
 vector records its model name and search only compares vectors from the active model.
 """
 
+import asyncio
 import hashlib
 import math
 import re
 
 import voyageai
+import voyageai.error
 
 from app.core.config import get_settings
 
@@ -45,17 +47,65 @@ async def embed(texts: list[str], input_type: str = "document") -> list[list[flo
         return [local_embed(t) for t in texts]
     global _voyage
     if _voyage is None:
-        _voyage = voyageai.AsyncClient(api_key=s.voyage_api_key)
+        _voyage = voyageai.AsyncClient(api_key=s.voyage_api_key, max_retries=0)
     out: list[list[float]] = []
-    for i in range(0, len(texts), 64):
-        batch = texts[i : i + 64]
-        result = await _voyage.embed(batch, model=s.embed_model, input_type=input_type, output_dimension=s.embed_dims)
-        out.extend(result.embeddings)
+    for batch in _batches(texts):
+        out.extend(await _embed_with_backoff(batch, input_type))
     return out
 
 
+MAX_BATCH_TOKENS = 8000  # stays under the lowest Voyage tier (10K tokens/minute) per request
+MAX_BATCH_ITEMS = 64
+
+
+def _estimate_tokens(text: str) -> int:
+    return len(text) // 3 + 1
+
+
+def _batches(texts: list[str]):
+    batch: list[str] = []
+    tokens = 0
+    for text in texts:
+        n = _estimate_tokens(text)
+        if batch and (tokens + n > MAX_BATCH_TOKENS or len(batch) >= MAX_BATCH_ITEMS):
+            yield batch
+            batch, tokens = [], 0
+        batch.append(text)
+        tokens += n
+    if batch:
+        yield batch
+
+
+async def _embed_with_backoff(batch: list[str], input_type: str, attempts: int = 8) -> list[list[float]]:
+    """Retries rate-limit errors with backoff (up to ~4 minutes), so low-tier accounts still complete."""
+    s = get_settings()
+    delay = 20.0
+    for attempt in range(attempts):
+        try:
+            result = await _voyage.embed(
+                batch, model=s.embed_model, input_type=input_type, output_dimension=s.embed_dims
+            )
+            return result.embeddings
+        except voyageai.error.RateLimitError:
+            if attempt == attempts - 1:
+                raise
+            await asyncio.sleep(delay)
+            delay = min(delay * 1.5, 60.0)
+    raise RuntimeError("unreachable")
+
+
+_query_cache: dict[tuple[str, str], list[float]] = {}
+QUERY_CACHE_SIZE = 2048
+
+
 async def embed_query(text: str) -> list[float]:
-    return (await embed([text], input_type="query"))[0]
+    """Query embeddings are cached in-process: agents repeat the same policy searches across claims."""
+    key = (active_model(), " ".join(text.lower().split()))
+    if key not in _query_cache:
+        if len(_query_cache) >= QUERY_CACHE_SIZE:
+            _query_cache.pop(next(iter(_query_cache)))
+        _query_cache[key] = (await embed([text], input_type="query"))[0]
+    return _query_cache[key]
 
 
 async def store_embed(texts: list[str]) -> list[list[float]]:

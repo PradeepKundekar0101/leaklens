@@ -24,6 +24,7 @@ from app.core.logging import get_logger
 log = get_logger(__name__)
 
 _client: anthropic.AsyncAnthropic | None = None
+MIN_MAX_TOKENS = 4000
 
 
 def get_client() -> anthropic.AsyncAnthropic:
@@ -31,7 +32,10 @@ def get_client() -> anthropic.AsyncAnthropic:
     if _client is None:
         settings = get_settings()
         client = anthropic.AsyncAnthropic(
-            api_key=settings.anthropic_api_key, timeout=settings.llm_timeout_seconds, max_retries=1
+            api_key=settings.anthropic_api_key,
+            base_url=settings.anthropic_base_url,
+            timeout=settings.llm_timeout_seconds,
+            max_retries=1,
         )
         if settings.langsmith_tracing and settings.langsmith_api_key:
             from langsmith.wrappers import wrap_anthropic
@@ -87,15 +91,30 @@ async def structured[T: BaseModel](
     started = time.monotonic()
     content = user if isinstance(user, list) else [{"type": "text", "text": user}]
     messages: list[dict] = [{"role": "user", "content": content}]
-    extra: dict[str, Any] = {}
-    if effort:
-        extra["output_config"] = {"effort": effort}
+    # Current models think adaptively by default and thinking counts against max_tokens, so small limits truncate
+    # the JSON. Small extraction/classification tasks on the fast model run at low effort.
+    max_tokens = max(max_tokens, MIN_MAX_TOKENS)
+    effort = effort or ("low" if model == get_settings().model_fast else None)
+    extra: dict[str, Any] = {"output_config": {"effort": effort}} if effort else {}
     for attempt in (1, 2):
         meta.attempts = attempt
         try:
             response = await _create(
                 model=model, max_tokens=max_tokens, system=system, messages=messages, output_format=schema, **extra
             )
+        except ValidationError as exc:  # the SDK validates while parsing; truncated or malformed JSON lands here
+            meta.error = f"invalid_output: {exc.errors()[0].get('msg', exc)}"
+            max_tokens *= 2
+            messages = [
+                *messages,
+                {"role": "assistant", "content": "(invalid output)"},
+                {
+                    "role": "user",
+                    "content": f"Your output failed validation: {meta.error}. Return complete JSON "
+                    "matching the schema.",
+                },
+            ]
+            continue
         except anthropic.APIError as exc:
             meta.unavailable = True
             meta.error = f"{type(exc).__name__}: {exc}"
@@ -182,6 +201,19 @@ async def agent_loop[T: BaseModel](
             kwargs["output_format"] = schema
         try:
             response = await _create(**kwargs)
+        except ValidationError as exc:
+            if meta.attempts >= 1:
+                meta.error = f"invalid_output: {exc.errors()[0].get('msg', exc)}"
+                break
+            meta.attempts += 1
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "Your last answer was not valid JSON for the schema. "
+                    "Answer again with complete, valid JSON.",
+                }
+            )
+            continue
         except anthropic.APIError as exc:
             meta.unavailable = True
             meta.error = f"{type(exc).__name__}: {exc}"

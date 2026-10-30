@@ -94,7 +94,7 @@ async def extract(session: AsyncSession, product_id: str) -> dict:
     )
     if result is None:
         return {"ok": False, "error": meta.error or "llm unavailable"}
-    proposed = to_jsonable(result.model_dump())
+    proposed = to_jsonable(result.as_params())
     if params is not None:
         params.proposed = {**proposed, "extracted_at": datetime.now(UTC).isoformat(), "prompt_version": version}
     return {"ok": True, "proposed": proposed, "diff": diff(current_as_comparable(params), proposed) if params else []}
