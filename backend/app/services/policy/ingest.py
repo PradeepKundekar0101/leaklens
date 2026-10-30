@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.models import PolicyChunk, PolicyProduct
+from app.services.documents.parse import docling_options
 from app.services.llm import client as llm
 from app.services.llm.schemas import ClauseType
 from app.services.policy.chunker import Block, Chunk, chunk_blocks, classify_heuristic
@@ -23,11 +24,10 @@ CLAUSE_MARKER = re.compile(r"\d+(?:\.\d+)*")
 
 def _docling_blocks(pdf_path: Path) -> list[Block]:
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
     from docling_core.types.doc import TableItem, TextItem
 
-    options = PdfPipelineOptions(do_ocr=False, do_table_structure=True)
+    options = docling_options()
     converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)})
     doc = converter.convert(str(pdf_path)).document
     blocks: list[Block] = []

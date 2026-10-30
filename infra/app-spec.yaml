@@ -1,13 +1,23 @@
-# DigitalOcean App Platform spec (region BLR1). Secrets are set as encrypted env vars in the DO console / doctl,
-# never committed. Deploy: doctl apps create --spec infra/app-spec.yaml (then doctl apps update <id> --spec ...).
+# DigitalOcean App Platform spec. Secrets are placeholders here and are filled from the gitignored .env.do by
+# infra/render_spec.py at deploy time; App Platform stores them encrypted.
+#   python3 infra/render_spec.py > /tmp/spec.yaml && doctl apps create --spec /tmp/spec.yaml   (first deploy)
+#   python3 infra/render_spec.py > /tmp/spec.yaml && doctl apps update <app-id> --spec /tmp/spec.yaml
+#
+# One domain for both components: /api and /health go to the backend, everything else to the frontend, so the
+# session cookie is first-party without any proxying.
 name: leaklens
 region: blr
+ingress:
+  rules:
+    - match: { path: { prefix: /api } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: /health } }
+      component: { name: api, preserve_path_prefix: true }
+    - match: { path: { prefix: / } }
+      component: { name: web }
 services:
   - name: api
-    github:
-      repo: OWNER/leaklens
-      branch: main
-      deploy_on_push: true
+    github: { repo: PradeepKundekar0101/leaklens, branch: main, deploy_on_push: true }
     source_dir: backend
     dockerfile_path: backend/Dockerfile
     http_port: 8000
@@ -15,56 +25,53 @@ services:
     instance_count: 1
     health_check:
       http_path: /health
-      initial_delay_seconds: 20
-    routes:
-      - path: /api
-        preserve_path_prefix: true
-      - path: /health
-        preserve_path_prefix: true
+      initial_delay_seconds: 30
+      period_seconds: 15
+      timeout_seconds: 5
+      failure_threshold: 6
     envs:
       - { key: APP_ENV, value: demo }
-      - { key: DATABASE_URL, scope: RUN_AND_BUILD_TIME, type: SECRET }        # pooled URL, ?sslmode=require
-      - { key: DATABASE_URL_DIRECT, scope: RUN_AND_BUILD_TIME, type: SECRET } # direct URL for LangGraph
+      - { key: DATABASE_URL, type: SECRET, value: "${DATABASE_URL}" }
+      - { key: DATABASE_URL_DIRECT, type: SECRET, value: "${DATABASE_URL_DIRECT}" }
       - { key: DB_POOL_MODE, value: transaction }
       - { key: STORAGE_BACKEND, value: spaces }
-      - { key: SPACES_ENDPOINT, value: https://blr1.digitaloceanspaces.com }
-      - { key: SPACES_REGION, value: blr1 }
-      - { key: SPACES_BUCKET, value: leaklens-files }
-      - { key: SPACES_KEY, type: SECRET }
-      - { key: SPACES_SECRET, type: SECRET }
-      - { key: ANTHROPIC_API_KEY, type: SECRET }
+      - { key: SPACES_ENDPOINT, value: "${SPACES_ENDPOINT}" }
+      - { key: SPACES_REGION, value: "${SPACES_REGION}" }
+      - { key: SPACES_BUCKET, value: "${SPACES_BUCKET}" }
+      - { key: SPACES_KEY, type: SECRET, value: "${SPACES_KEY}" }
+      - { key: SPACES_SECRET, type: SECRET, value: "${SPACES_SECRET}" }
+      - { key: ANTHROPIC_API_KEY, type: SECRET, value: "${ANTHROPIC_API_KEY}" }
+      - { key: ANTHROPIC_BASE_URL, value: https://api.anthropic.com }
       - { key: MODEL_REASONING, value: claude-sonnet-5-5 }
       - { key: MODEL_FAST, value: claude-haiku-5-5 }
-      - { key: VOYAGE_API_KEY, type: SECRET }
-      - { key: LANGSMITH_API_KEY, type: SECRET }
+      - { key: VOYAGE_API_KEY, type: SECRET, value: "${VOYAGE_API_KEY}" }
+      - { key: EMBED_MODEL, value: voyage-3.5 }
+      - { key: EMBED_DIMS, value: "1024" }
+      - { key: LANGSMITH_API_KEY, type: SECRET, value: "${LANGSMITH_API_KEY}" }
       - { key: LANGSMITH_PROJECT, value: leaklens }
       - { key: LANGSMITH_TRACING, value: "true" }
-      - { key: JWT_SECRET, type: SECRET }
+      - { key: JWT_SECRET, type: SECRET, value: "${JWT_SECRET}" }
+      - { key: JWT_EXPIRE_MINUTES, value: "480" }
       - { key: COOKIE_SECURE, value: "true" }
-      - { key: CORS_ORIGINS, value: "${web.PUBLIC_URL}" }
+      - { key: CORS_ORIGINS, value: "${APP_URL}" }
+      - { key: JOB_CONCURRENCY, value: "2" }
   - name: web
-    github:
-      repo: OWNER/leaklens
-      branch: main
-      deploy_on_push: true
+    github: { repo: PradeepKundekar0101/leaklens, branch: main, deploy_on_push: true }
     source_dir: frontend
+    environment_slug: node-js
     build_command: pnpm install --frozen-lockfile && pnpm build
-    run_command: pnpm start
-    http_port: 3000
+    run_command: pnpm start --port 8080
+    http_port: 8080
     instance_size_slug: apps-s-1vcpu-1gb
-    routes:
-      - path: /
-    envs:
-      # The web app proxies /api to the backend through Next.js rewrites, so cookies stay first-party.
-      - { key: NEXT_PUBLIC_API_URL, value: "${api.PRIVATE_URL}", scope: RUN_AND_BUILD_TIME }
+    instance_count: 1
 jobs:
   - name: migrate
     kind: PRE_DEPLOY
-    github:
-      repo: OWNER/leaklens
-      branch: main
+    github: { repo: PradeepKundekar0101/leaklens, branch: main }
     source_dir: backend
     dockerfile_path: backend/Dockerfile
+    instance_size_slug: apps-s-1vcpu-1gb
     run_command: uv run --no-sync alembic upgrade head
     envs:
-      - { key: DATABASE_URL, type: SECRET }
+      # Migrations use the direct (not pooled) connection.
+      - { key: DATABASE_URL, type: SECRET, value: "${DATABASE_URL_MIGRATE}" }

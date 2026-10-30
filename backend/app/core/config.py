@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     model_fast: str = "claude-haiku-5-5"
     llm_timeout_seconds: float = 30.0
 
+    docling_artifacts_path: str = ""  # models baked into the Docker image; empty = download on first use
+
     voyage_api_key: str = ""
     embed_model: str = "voyage-3.5"
     embed_dims: int = 1024

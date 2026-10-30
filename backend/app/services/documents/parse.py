@@ -45,15 +45,24 @@ class ParsedDocument:
         return "\n\n".join(f"--- page {p.number} ---\n{p.text}" for p in self.pages)
 
 
+def docling_options():
+    """Shared Docling settings: no OCR (scans go to the vision model), table structure on, baked-in models."""
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+
+    from app.core.config import get_settings
+
+    path = get_settings().docling_artifacts_path
+    return PdfPipelineOptions(do_ocr=False, do_table_structure=True, artifacts_path=path or None)
+
+
 def _get_converter():
     global _converter
     with _lock:
         if _converter is None:
             from docling.datamodel.base_models import InputFormat
-            from docling.datamodel.pipeline_options import PdfPipelineOptions
             from docling.document_converter import DocumentConverter, PdfFormatOption
 
-            options = PdfPipelineOptions(do_ocr=False, do_table_structure=True)
+            options = docling_options()
             _converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)})
     return _converter
 
